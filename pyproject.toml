@@ -1,6 +1,6 @@
 [project]
 name = "blender-mcp-cli"
-version = "1.6.0"
+version = "1.6.1"
 description = "Direct command-line control for the Blender MCP add-on"
 readme = "README.md"
 requires-python = ">=3.10"
