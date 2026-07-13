@@ -217,10 +217,13 @@ jobs:
           import os
           from pathlib import Path
           import subprocess
+          import time
 
           asset = next(Path("skill-dist").glob("*.zip")).resolve()
           tag = os.environ["RELEASE_TAG"]
           repository = os.environ["GITHUB_REPOSITORY"]
+          poll_interval = 2
+          poll_timeout = 60
 
           def releases():
               return json.loads(
@@ -240,6 +243,45 @@ jobs:
                   None,
               )
 
+          def matching_asset(release):
+              matches = [
+                  item for item in release["assets"] if item["name"] == asset.name
+              ]
+              if len(matches) > 1:
+                  raise SystemExit(f"release has duplicate assets named {asset.name}")
+              return matches[0] if matches else None
+
+          def wait_for_release():
+              deadline = time.monotonic() + poll_timeout
+              while True:
+                  release = find_release()
+                  if release is not None:
+                      return release
+                  if time.monotonic() >= deadline:
+                      return None
+                  time.sleep(poll_interval)
+
+          def wait_for_verified_asset(expected_digest):
+              deadline = time.monotonic() + poll_timeout
+              while True:
+                  release = find_release()
+                  uploaded = matching_asset(release) if release is not None else None
+                  if uploaded is not None:
+                      actual_digest = uploaded.get("digest")
+                      if actual_digest == expected_digest:
+                          return release
+                      if actual_digest not in (None, ""):
+                          raise SystemExit(
+                              f"release asset {asset.name} has an unexpected "
+                              "SHA-256 digest"
+                          )
+                  if time.monotonic() >= deadline:
+                      raise SystemExit(
+                          f"release asset {asset.name} did not become visible with "
+                          "a verified SHA-256 digest before the timeout"
+                      )
+                  time.sleep(poll_interval)
+
           release = find_release()
           if release is None:
               subprocess.check_call(
@@ -257,22 +299,15 @@ jobs:
                       tag,
                   ]
               )
-              release = find_release()
+              release = wait_for_release()
           if release is None:
-              raise SystemExit(f"could not find draft release for {tag}")
+              raise SystemExit(
+                  f"could not find draft release for {tag} before the timeout"
+              )
 
           expected_digest = "sha256:" + hashlib.sha256(asset.read_bytes()).hexdigest()
-          matching_assets = [
-              item for item in release["assets"] if item["name"] == asset.name
-          ]
-          if len(matching_assets) > 1:
-              raise SystemExit(f"release has duplicate assets named {asset.name}")
-          existing = matching_assets[0] if matching_assets else None
+          existing = matching_asset(release)
 
-          if existing is not None and existing.get("digest") != expected_digest:
-              raise SystemExit(
-                  f"release asset {asset.name} has an unexpected SHA-256 digest"
-              )
           if existing is None:
               if not release["draft"]:
                   raise SystemExit(
@@ -290,13 +325,7 @@ jobs:
                       repository,
                   ]
               )
-              release = find_release()
-              uploaded = next(
-                  (item for item in release["assets"] if item["name"] == asset.name),
-                  None,
-              )
-              if uploaded is None or uploaded.get("digest") != expected_digest:
-                  raise SystemExit("uploaded Skill asset digest verification failed")
+          release = wait_for_verified_asset(expected_digest)
 
           if release["draft"]:
               subprocess.check_call(

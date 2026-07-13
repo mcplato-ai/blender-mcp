@@ -54,6 +54,9 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn('"--draft",', workflow)
         self.assertIn('"--draft=false",', workflow)
         self.assertIn("expected_digest", workflow)
+        self.assertIn("def wait_for_release():", workflow)
+        self.assertIn("def wait_for_verified_asset(expected_digest):", workflow)
+        self.assertIn("time.monotonic() + poll_timeout", workflow)
 
     def test_skill_and_documentation_use_final_cli_name(self):
         skill = (PROJECT_ROOT / "skills/blender-mcp-cli/SKILL.md").read_text(
