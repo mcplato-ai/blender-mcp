@@ -1,0 +1,4 @@
+interface:
+  display_name: "Blender MCP CLI"
+  short_description: "Set up and control Blender through the direct CLI"
+  default_prompt: "Use $blender-mcp-cli to prepare Blender, verify the socket connection, and execute the requested scene operations through the direct CLI."

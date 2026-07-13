@@ -1,0 +1,3 @@
+include addon.py
+recursive-include skills/blender-mcp-cli *.md *.yaml
+recursive-include tests *.py

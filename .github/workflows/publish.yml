@@ -1,0 +1,119 @@
+name: Test and publish blender-mcp-cli
+
+"on":
+  push:
+    branches:
+      - main
+  pull_request:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.10"
+          - "3.11"
+          - "3.12"
+          - "3.13"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Run unit and capability parity tests
+        env:
+          PYTHONPATH: src
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python -m unittest discover -s tests -v
+
+  build:
+    name: Build and smoke-test distribution
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install build tooling
+        run: python -m pip install --upgrade build
+      - name: Build sdist and wheel
+        run: python -m build
+      - name: Verify release tag matches package version
+        if: github.event_name == 'release'
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+
+          with open("pyproject.toml", "rb") as file:
+              version = tomllib.load(file)["project"]["version"]
+          tag = os.environ["RELEASE_TAG"].removeprefix("v")
+          if tag != version:
+              raise SystemExit(f"release tag {tag!r} does not match package version {version!r}")
+          PY
+      - name: Smoke-test wheel without MCP dependencies
+        run: |
+          python -m venv .smoke
+          .smoke/bin/python -m pip install --no-deps dist/blender_mcp_cli-*.whl
+          .smoke/bin/python - <<'PY'
+          import json
+          import subprocess
+          import tomllib
+
+          with open("pyproject.toml", "rb") as file:
+              version = tomllib.load(file)["project"]["version"]
+
+          command = ".smoke/bin/blender-mcp-cli"
+          actual_version = subprocess.check_output(
+              [command, "--version"], text=True
+          ).strip()
+          expected_version = f"blender-mcp-cli {version}"
+          if actual_version != expected_version:
+              raise SystemExit(
+                  f"unexpected CLI version: {actual_version!r}; expected {expected_version!r}"
+              )
+
+          schema = json.loads(subprocess.check_output([command, "schema"], text=True))
+          if not schema.get("ok") or len(schema["result"]["commands"]) < 24:
+              raise SystemExit("CLI schema smoke test failed")
+          PY
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish blender-mcp-cli to PyPI
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/blender-mcp-cli
+    permissions:
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/
+      - name: Publish with PyPI Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          print-hash: true

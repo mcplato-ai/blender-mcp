@@ -1,33 +1,40 @@
 [project]
-name = "blender-mcp"
+name = "blender-mcp-cli"
 version = "1.6.0"
-description = "Blender integration through the Model Context Protocol"
+description = "Direct command-line control for the Blender MCP add-on"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-    {name = "Your Name", email = "your.email@example.com"}
+    {name = "mcplato-ai"}
 ]
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent",
 ]
-dependencies = [
+dependencies = []
+
+[project.optional-dependencies]
+legacy-mcp = [
     "mcp[cli]>=1.3.0",
     "httpx>=0.27.0",
 ]
 
 [project.scripts]
-blender-mcp = "blender_mcp.server:main"
+blender-mcp-cli = "blender_mcp.cli:main"
 
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=77.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [project.urls]
-"Homepage" = "https://github.com/yourusername/blender-mcp"
-"Bug Tracker" = "https://github.com/yourusername/blender-mcp/issues"
+"Homepage" = "https://github.com/mcplato-ai/blender-mcp"
+"Bug Tracker" = "https://github.com/mcplato-ai/blender-mcp/issues"

@@ -1,8 +1,11 @@
 
 
-# BlenderMCP - Blender Model Context Protocol Integration
+# Blender MCP CLI
 
-BlenderMCP connects Blender to Claude AI through the Model Context Protocol (MCP), allowing Claude to directly interact with and control Blender. This integration enables prompt assisted 3D modeling, scene creation, and manipulation.
+`blender-mcp-cli` lets scripts, agents, and LLM runners control the unchanged
+BlenderMCP add-on directly through its TCP/JSON socket, without an MCP host. The
+repository also retains the original MCP server source as an optional legacy
+integration.
 
 **[Official website](https://blendermcp.org/)**
 
@@ -48,12 +51,95 @@ For the current version and changelog, see the [releases page](https://github.co
 
 ## Components
 
-The system consists of two main components:
+The repository contains three client/server layers:
 
 1. **Blender Addon (`addon.py`)**: A Blender addon that creates a socket server within Blender to receive and execute commands
 2. **MCP Server (`src/blender_mcp/server.py`)**: A Python server that implements the Model Context Protocol and connects to the Blender addon
+3. **Direct CLI (`src/blender_mcp/cli.py`)**: A Python command-line client that talks to the Blender addon directly without MCP
+
+The Blender addon uses raw TCP with JSON messages on `localhost:9876`. It is not
+an HTTP server. Both Python clients use the same unchanged addon protocol.
+
+## Direct CLI (No MCP)
+
+The `blender-mcp-cli` command is intended for scripts, agents, and LLM clients that
+do not want an MCP host. It uses only the existing Blender addon socket and does
+not import or start FastMCP.
+
+Install the package, enable the addon in Blender, and verify the CLI:
+
+```bash
+pipx install blender-mcp-cli
+blender-mcp-cli --help
+blender-mcp-cli --pretty schema
+blender-mcp-cli --pretty status all
+```
+
+Alternatively use `uv tool install blender-mcp-cli`. For a source checkout,
+run `python -m pip install -e .` from the repository root.
+
+Common operations:
+
+```bash
+# Inspect Blender
+blender-mcp-cli --pretty scene info
+blender-mcp-cli --pretty object info Cube
+
+# Execute multiline Blender Python without shell quoting
+blender-mcp-cli code exec --file create_scene.py
+printf 'print(bpy.app.version_string)' | blender-mcp-cli code exec --stdin
+
+# Capture the current viewport
+blender-mcp-cli viewport screenshot ./viewport.png --max-size 1000
+
+# Call any current or future addon command directly
+blender-mcp-cli raw call get_object_info --params '{"name":"Cube"}'
+```
+
+The command tree also covers Poly Haven, Sketchfab, Hyper3D Rodin, and
+Hunyuan3D. Run help at any level:
+
+```bash
+blender-mcp-cli polyhaven --help
+blender-mcp-cli sketchfab download --help
+blender-mcp-cli hyper3d generate-images --help
+blender-mcp-cli hunyuan3d generate --help
+```
+
+### CLI contract for LLM clients
+
+- Run `blender-mcp-cli schema` for a machine-readable capability catalog.
+- Successful commands write exactly one JSON object to stdout and exit `0`.
+- Runtime errors write exactly one JSON object to stderr and use stable non-zero exit codes.
+- A timeout is never retried automatically because the Blender command may already have executed.
+- `code exec` runs arbitrary Python inside Blender and must only be used with trusted input.
+- Screenshot paths are interpreted by Blender and must be visible to both processes.
+
+### Codex Skill
+
+The repository and source distribution include
+`skills/blender-mcp-cli/SKILL.md`. Invoke it as `$blender-mcp-cli` when an agent
+needs the environment setup, command workflow, timeout rules, and verification
+sequence in context.
+
+The default connection can be overridden with `BLENDER_HOST`, `BLENDER_PORT`,
+`BLENDER_CONNECT_TIMEOUT`, and `BLENDER_TIMEOUT`, or the corresponding CLI
+options. Since the unchanged addon binds to localhost, remote use should go
+through a controlled tunnel rather than exposing the socket publicly.
+
+### Publishing
+
+The GitHub workflow builds and tests every push and pull request. Publishing is
+restricted to a published GitHub Release whose `vX.Y.Z` tag matches the version
+in `pyproject.toml`. Configure a PyPI Trusted Publisher for repository
+`mcplato-ai/blender-mcp`, workflow `publish.yml`, and environment `pypi`; no
+long-lived PyPI token is required in GitHub secrets.
 
 ## Installation
+
+The sections below document the optional legacy MCP server. From a source
+checkout, install it with `python -m pip install -e '.[legacy-mcp]'` and run
+`python -m blender_mcp.server`. Direct CLI users do not need this extra.
 
 
 ### Prerequisites

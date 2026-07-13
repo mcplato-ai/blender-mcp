@@ -27,19 +27,22 @@ wheels = [
 ]
 
 [[package]]
-name = "blender-mcp"
+name = "blender-mcp-cli"
 version = "1.6.0"
 source = { editable = "." }
-dependencies = [
+
+[package.optional-dependencies]
+legacy-mcp = [
     { name = "httpx" },
     { name = "mcp", extra = ["cli"] },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "httpx", specifier = ">=0.27.0" },
-    { name = "mcp", extras = ["cli"], specifier = ">=1.3.0" },
+    { name = "httpx", marker = "extra == 'legacy-mcp'", specifier = ">=0.27.0" },
+    { name = "mcp", extras = ["cli"], marker = "extra == 'legacy-mcp'", specifier = ">=1.3.0" },
 ]
+provides-extras = ["legacy-mcp"]
 
 [[package]]
 name = "certifi"
