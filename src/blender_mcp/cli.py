@@ -888,11 +888,13 @@ def _reject_skill_destination_symlinks(target: Path) -> None:
 
 
 def _bundled_skill_path() -> Path:
-    installed_root = Path(__file__).resolve().parents[1]
-    candidates = [
-        Path(__file__).resolve().parents[2] / "skills" / SKILL_NAME,
+    module_path = Path(__file__).resolve()
+    installed_root = module_path.parents[1]
+    candidates: list[Path] = [
         installed_root / Path(SKILL_DATA_FILE).parent,
     ]
+    if module_path.parent.parent.name == "src":
+        candidates.append(module_path.parents[2] / "skills" / SKILL_NAME)
 
     try:
         installed_distribution = distribution("blender-mcp-cli")

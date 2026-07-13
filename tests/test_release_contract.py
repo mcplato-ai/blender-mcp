@@ -32,6 +32,12 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn("id-token: write", workflow)
         self.assertIn("pypa/gh-action-pypi-publish@release/v1", workflow)
         self.assertIn("dist/blender_mcp_cli-*.whl", workflow)
+        self.assertIn("actions/checkout@v7", workflow)
+        self.assertIn("actions/setup-python@v6", workflow)
+        self.assertIn("actions/upload-artifact@v7", workflow)
+        self.assertIn("actions/download-artifact@v8", workflow)
+        self.assertNotIn("actions/checkout@v4", workflow)
+        self.assertNotIn("actions/setup-python@v5", workflow)
 
     def test_skill_and_documentation_use_final_cli_name(self):
         skill = (PROJECT_ROOT / "skills/blender-mcp-cli/SKILL.md").read_text(

@@ -179,9 +179,10 @@ class BlenderCLITests(unittest.TestCase):
 
     def test_skill_path_supports_pip_target_layout(self):
         with tempfile.TemporaryDirectory() as directory:
-            target = Path(directory)
+            repository = Path(directory) / "repository"
+            target = repository / ".smoke-target"
             module_file = target / "blender_mcp/cli.py"
-            module_file.parent.mkdir()
+            module_file.parent.mkdir(parents=True)
             module_file.touch()
             skill_path = (
                 target / "share/blender-mcp-cli/skills/blender-mcp-cli"
@@ -189,6 +190,46 @@ class BlenderCLITests(unittest.TestCase):
             (skill_path / "agents").mkdir(parents=True)
             (skill_path / "SKILL.md").write_text("skill", encoding="utf-8")
             (skill_path / "agents/openai.yaml").write_text(
+                "interface: {}", encoding="utf-8"
+            )
+            misleading_source = repository / "skills/blender-mcp-cli"
+            (misleading_source / "agents").mkdir(parents=True)
+            (misleading_source / "SKILL.md").write_text(
+                "wrong skill", encoding="utf-8"
+            )
+            (misleading_source / "agents/openai.yaml").write_text(
+                "interface: {}", encoding="utf-8"
+            )
+
+            with mock.patch.object(cli_module, "__file__", str(module_file)), mock.patch(
+                "blender_mcp.cli.distribution",
+                side_effect=cli_module.PackageNotFoundError,
+            ):
+                resolved = cli_module._bundled_skill_path()
+
+            self.assertEqual(resolved, skill_path.resolve())
+
+    def test_skill_path_prefers_pip_target_data_when_target_is_named_src(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory) / "repository"
+            target = repository / "src"
+            module_file = target / "blender_mcp/cli.py"
+            module_file.parent.mkdir(parents=True)
+            module_file.touch()
+            skill_path = (
+                target / "share/blender-mcp-cli/skills/blender-mcp-cli"
+            )
+            (skill_path / "agents").mkdir(parents=True)
+            (skill_path / "SKILL.md").write_text("skill", encoding="utf-8")
+            (skill_path / "agents/openai.yaml").write_text(
+                "interface: {}", encoding="utf-8"
+            )
+            misleading_source = repository / "skills/blender-mcp-cli"
+            (misleading_source / "agents").mkdir(parents=True)
+            (misleading_source / "SKILL.md").write_text(
+                "wrong skill", encoding="utf-8"
+            )
+            (misleading_source / "agents/openai.yaml").write_text(
                 "interface: {}", encoding="utf-8"
             )
 
