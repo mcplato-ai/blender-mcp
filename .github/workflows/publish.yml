@@ -4,13 +4,16 @@ name: Test and publish blender-mcp-cli
   push:
     branches:
       - main
+    tags:
+      - "v*"
   pull_request:
-  release:
-    types:
-      - published
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   test:
@@ -46,12 +49,18 @@ jobs:
           python-version: "3.11"
       - name: Install build tooling
         run: python -m pip install --upgrade build
+      - name: Validate Agent Skill
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh skill publish --dry-run
       - name: Build sdist and wheel
         run: python -m build
+      - name: Build standalone Skill archive
+        run: python scripts/build_skill_archive.py --output-dir skill-dist
       - name: Verify release tag matches package version
-        if: github.event_name == 'release'
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           python - <<'PY'
           import os
@@ -95,7 +104,7 @@ jobs:
               subprocess.check_output([command, "skill", "path"], text=True)
           )["result"]
           skill_path = Path(skill["path"])
-          for relative_name in ("SKILL.md", "agents/openai.yaml"):
+          for relative_name in ("SKILL.md", "LICENSE", "agents/openai.yaml"):
               if not (skill_path / relative_name).is_file():
                   raise SystemExit(f"wheel is missing bundled Skill file {relative_name}")
 
@@ -114,7 +123,7 @@ jobs:
           )["result"]
           if Path(installed["target"]) != install_target:
               raise SystemExit("Skill install smoke test returned the wrong target")
-          for relative_name in ("SKILL.md", "agents/openai.yaml"):
+          for relative_name in ("SKILL.md", "LICENSE", "agents/openai.yaml"):
               if not (install_target / relative_name).is_file():
                   raise SystemExit(f"Skill install missed {relative_name}")
 
@@ -151,13 +160,21 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: python-distributions
-          path: dist/
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+          if-no-files-found: error
+      - name: Upload standalone Skill archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: standalone-skill
+          path: skill-dist/*.zip
           if-no-files-found: error
 
   publish:
     name: Publish blender-mcp-cli to PyPI
-    if: github.event_name == 'release'
-    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: publish-skill
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -175,3 +192,122 @@ jobs:
         with:
           packages-dir: dist/
           print-hash: true
+
+  publish-skill:
+    name: Publish GitHub Release with standalone Skill
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download standalone Skill archive
+        uses: actions/download-artifact@v8
+        with:
+          name: standalone-skill
+          path: skill-dist/
+      - name: Create or verify draft release, attach Skill, and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+
+          asset = next(Path("skill-dist").glob("*.zip")).resolve()
+          tag = os.environ["RELEASE_TAG"]
+          repository = os.environ["GITHUB_REPOSITORY"]
+
+          def releases():
+              return json.loads(
+                  subprocess.check_output(
+                      [
+                          "gh",
+                          "api",
+                          f"repos/{repository}/releases?per_page=100",
+                      ],
+                      text=True,
+                  )
+              )
+
+          def find_release():
+              return next(
+                  (item for item in releases() if item["tag_name"] == tag),
+                  None,
+              )
+
+          release = find_release()
+          if release is None:
+              subprocess.check_call(
+                  [
+                      "gh",
+                      "release",
+                      "create",
+                      tag,
+                      "--repo",
+                      repository,
+                      "--verify-tag",
+                      "--draft",
+                      "--generate-notes",
+                      "--title",
+                      tag,
+                  ]
+              )
+              release = find_release()
+          if release is None:
+              raise SystemExit(f"could not find draft release for {tag}")
+
+          expected_digest = "sha256:" + hashlib.sha256(asset.read_bytes()).hexdigest()
+          matching_assets = [
+              item for item in release["assets"] if item["name"] == asset.name
+          ]
+          if len(matching_assets) > 1:
+              raise SystemExit(f"release has duplicate assets named {asset.name}")
+          existing = matching_assets[0] if matching_assets else None
+
+          if existing is not None and existing.get("digest") != expected_digest:
+              raise SystemExit(
+                  f"release asset {asset.name} has an unexpected SHA-256 digest"
+              )
+          if existing is None:
+              if not release["draft"]:
+                  raise SystemExit(
+                      f"published release {tag} is missing {asset.name}; "
+                      "publish from a version tag so the asset is attached while draft"
+                  )
+              subprocess.check_call(
+                  [
+                      "gh",
+                      "release",
+                      "upload",
+                      tag,
+                      str(asset),
+                      "--repo",
+                      repository,
+                  ]
+              )
+              release = find_release()
+              uploaded = next(
+                  (item for item in release["assets"] if item["name"] == asset.name),
+                  None,
+              )
+              if uploaded is None or uploaded.get("digest") != expected_digest:
+                  raise SystemExit("uploaded Skill asset digest verification failed")
+
+          if release["draft"]:
+              subprocess.check_call(
+                  [
+                      "gh",
+                      "release",
+                      "edit",
+                      tag,
+                      "--repo",
+                      repository,
+                      "--draft=false",
+                  ]
+              )
+          PY

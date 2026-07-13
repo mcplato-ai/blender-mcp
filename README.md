@@ -118,9 +118,34 @@ blender-mcp-cli hunyuan3d generate --help
 
 ### Codex Skill
 
-The wheel and source distribution publish the Codex Skill together with the
-CLI. Install it into the default Codex skills directory and inspect the
-resolved paths with:
+Every GitHub Release publishes a standalone
+`blender-mcp-cli-skill-X.Y.Z.zip` containing only the installable Skill. With a
+current GitHub CLI, install only the latest tagged Skill at user scope:
+
+```bash
+gh skill install mcplato-ai/blender-mcp blender-mcp-cli \
+  --agent codex --scope user
+```
+
+Alternatively, download the standalone ZIP from the GitHub Release and extract
+it directly into the Codex skills directory:
+
+```bash
+gh release download \
+  --repo mcplato-ai/blender-mcp \
+  --pattern 'blender-mcp-cli-skill-*.zip'
+
+unzip blender-mcp-cli-skill-X.Y.Z.zip \
+  -d "${CODEX_HOME:-$HOME/.codex}/skills"
+```
+
+The archive already contains the top-level `blender-mcp-cli/` directory. Start
+a new Codex session after installation so Codex discovers it. The standalone
+Skill does not install the Python CLI; install `blender-mcp-cli` separately
+before controlling Blender.
+
+The wheel and source distribution also publish the same Skill together with
+the CLI. Install or inspect that bundled copy with:
 
 ```bash
 blender-mcp-cli skill path
@@ -130,10 +155,9 @@ blender-mcp-cli skill install
 The default destination is
 `${CODEX_HOME:-~/.codex}/skills/blender-mcp-cli`. Use
 `blender-mcp-cli skill install --help` for `--target` and safe overwrite
-options. After installation, invoke `$blender-mcp-cli` when an agent needs the
-environment setup, direct CLI workflow, timeout rules, and visual verification
-sequence in context. Start a new Codex session after the first Skill install so
-Codex discovers it.
+options. Invoke `$blender-mcp-cli` when an agent needs the environment setup,
+direct CLI workflow, timeout rules, and visual verification sequence in
+context.
 
 For a source checkout, the same commands use
 `skills/blender-mcp-cli/SKILL.md` directly, so local Skill changes can be tested
@@ -147,10 +171,24 @@ through a controlled tunnel rather than exposing the socket publicly.
 ### Publishing
 
 The GitHub workflow builds and tests every push and pull request. Publishing is
-restricted to a published GitHub Release whose `vX.Y.Z` tag matches the version
-in `pyproject.toml`. Configure a PyPI Trusted Publisher for repository
-`mcplato-ai/blender-mcp`, workflow `publish.yml`, and environment `pypi`; no
-long-lived PyPI token is required in GitHub secrets.
+triggered by pushing a `vX.Y.Z` tag that matches the version in
+`pyproject.toml`. The workflow creates a draft GitHub Release, attaches and
+verifies the standalone Skill ZIP, publishes the Release, and only then
+publishes the Python distributions to PyPI. This ordering supports immutable
+GitHub Releases and prevents PyPI publication when the Skill asset failed.
+
+Configure a PyPI Trusted Publisher for repository `mcplato-ai/blender-mcp`,
+workflow `publish.yml`, and environment `pypi`; no long-lived PyPI token is
+required in GitHub secrets.
+
+A maintainer with a current GitHub CLI can validate the Skill and create the
+release that triggers both publications:
+
+```bash
+gh skill publish --dry-run
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
 
 ## Installation
 

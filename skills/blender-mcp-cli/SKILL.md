@@ -12,17 +12,17 @@ add-on endpoint as raw TCP/JSON on `localhost:9876`, not HTTP or MCP.
 
 1. Use Python 3.10 or newer and Blender 3.0 or newer with its GUI. Do not use
    `blender -b`; the add-on dispatches work through Blender's main event loop.
-2. Install the CLI and Skill. Ensure the installed `blender-mcp-cli` script is
-   on `PATH`; `pipx` or `uv tool` can provide an isolated installation when
-   preferred.
+2. Install the CLI. Ensure the installed `blender-mcp-cli` script is on `PATH`;
+   `pipx` or `uv tool` can provide an isolated installation when preferred.
 
 ```bash
 python -m pip install --upgrade blender-mcp-cli
-blender-mcp-cli skill install
 ```
 
-The package publishes this Skill in both its wheel and source distribution.
-`skill install` copies it to
+The Skill is published independently as a GitHub Release ZIP and through the
+repository's `skills/` directory. It is also included in the Python wheel and
+source distribution. When installing it from the Python package, run
+`blender-mcp-cli skill install`; this copies it to
 `${CODEX_HOME:-~/.codex}/skills/blender-mcp-cli`. Use
 `blender-mcp-cli skill path` to inspect the bundled source or
 `blender-mcp-cli skill install --help` to choose another exact destination.

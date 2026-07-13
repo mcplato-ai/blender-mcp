@@ -64,9 +64,10 @@ class BlenderCLITests(unittest.TestCase):
         result = json.loads(stdout)["result"]
         skill_path = Path(result["path"])
         self.assertEqual(
-            result["files"], ["SKILL.md", "agents/openai.yaml"]
+            result["files"], ["SKILL.md", "LICENSE", "agents/openai.yaml"]
         )
         self.assertTrue((skill_path / "SKILL.md").is_file())
+        self.assertTrue((skill_path / "LICENSE").is_file())
         self.assertTrue((skill_path / "agents/openai.yaml").is_file())
 
     def test_skill_install_help_documents_destination_and_overwrite(self):
@@ -101,6 +102,7 @@ class BlenderCLITests(unittest.TestCase):
                 json.loads(stdout)["result"]["target"], str(target.resolve())
             )
             self.assertTrue((target / "SKILL.md").is_file())
+            self.assertTrue((target / "LICENSE").is_file())
             self.assertTrue((target / "agents/openai.yaml").is_file())
 
             marker = target / "keep.txt"
@@ -130,6 +132,7 @@ class BlenderCLITests(unittest.TestCase):
             self.assertEqual(stderr, "")
             self.assertEqual(json.loads(stdout)["result"]["target"], str(expected))
             self.assertTrue((expected / "SKILL.md").is_file())
+            self.assertTrue((expected / "LICENSE").is_file())
             self.assertTrue((expected / "agents/openai.yaml").is_file())
 
     def test_skill_install_force_rejects_destination_symlinks(self):
@@ -189,6 +192,7 @@ class BlenderCLITests(unittest.TestCase):
             )
             (skill_path / "agents").mkdir(parents=True)
             (skill_path / "SKILL.md").write_text("skill", encoding="utf-8")
+            (skill_path / "LICENSE").write_text("license", encoding="utf-8")
             (skill_path / "agents/openai.yaml").write_text(
                 "interface: {}", encoding="utf-8"
             )
@@ -196,6 +200,9 @@ class BlenderCLITests(unittest.TestCase):
             (misleading_source / "agents").mkdir(parents=True)
             (misleading_source / "SKILL.md").write_text(
                 "wrong skill", encoding="utf-8"
+            )
+            (misleading_source / "LICENSE").write_text(
+                "wrong license", encoding="utf-8"
             )
             (misleading_source / "agents/openai.yaml").write_text(
                 "interface: {}", encoding="utf-8"
@@ -221,6 +228,7 @@ class BlenderCLITests(unittest.TestCase):
             )
             (skill_path / "agents").mkdir(parents=True)
             (skill_path / "SKILL.md").write_text("skill", encoding="utf-8")
+            (skill_path / "LICENSE").write_text("license", encoding="utf-8")
             (skill_path / "agents/openai.yaml").write_text(
                 "interface: {}", encoding="utf-8"
             )
@@ -228,6 +236,9 @@ class BlenderCLITests(unittest.TestCase):
             (misleading_source / "agents").mkdir(parents=True)
             (misleading_source / "SKILL.md").write_text(
                 "wrong skill", encoding="utf-8"
+            )
+            (misleading_source / "LICENSE").write_text(
+                "wrong license", encoding="utf-8"
             )
             (misleading_source / "agents/openai.yaml").write_text(
                 "interface: {}", encoding="utf-8"

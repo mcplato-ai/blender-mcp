@@ -38,6 +38,7 @@ package-dir = {"" = "src"}
 [tool.setuptools.data-files]
 "share/blender-mcp-cli/skills/blender-mcp-cli" = [
     "skills/blender-mcp-cli/SKILL.md",
+    "skills/blender-mcp-cli/LICENSE",
 ]
 "share/blender-mcp-cli/skills/blender-mcp-cli/agents" = [
     "skills/blender-mcp-cli/agents/openai.yaml",

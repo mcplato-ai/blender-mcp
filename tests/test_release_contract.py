@@ -26,8 +26,11 @@ class ReleaseContractTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn("release:", workflow)
-        self.assertIn("github.event_name == 'release'", workflow)
+        self.assertIn('tags:\n      - "v*"', workflow)
+        self.assertIn("startsWith(github.ref, 'refs/tags/v')", workflow)
+        self.assertNotIn("github.event_name == 'release'", workflow)
+        self.assertIn("group: ${{ github.workflow }}-${{ github.ref }}", workflow)
+        self.assertIn("cancel-in-progress: false", workflow)
         self.assertIn("environment:\n      name: pypi", workflow)
         self.assertIn("id-token: write", workflow)
         self.assertIn("pypa/gh-action-pypi-publish@release/v1", workflow)
@@ -38,6 +41,19 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn("actions/download-artifact@v8", workflow)
         self.assertNotIn("actions/checkout@v4", workflow)
         self.assertNotIn("actions/setup-python@v5", workflow)
+        self.assertIn("python scripts/build_skill_archive.py", workflow)
+        self.assertIn("gh skill publish --dry-run", workflow)
+        self.assertIn("name: standalone-skill", workflow)
+        self.assertIn("path: skill-dist/*.zip", workflow)
+        self.assertIn("Publish GitHub Release with standalone Skill", workflow)
+        self.assertIn("contents: write", workflow)
+        self.assertIn('"release",', workflow)
+        self.assertIn('"upload",', workflow)
+        self.assertNotIn("--clobber", workflow)
+        self.assertIn("needs: publish-skill", workflow)
+        self.assertIn('"--draft",', workflow)
+        self.assertIn('"--draft=false",', workflow)
+        self.assertIn("expected_digest", workflow)
 
     def test_skill_and_documentation_use_final_cli_name(self):
         skill = (PROJECT_ROOT / "skills/blender-mcp-cli/SKILL.md").read_text(
@@ -54,6 +70,8 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn("pipx install blender-mcp-cli", readme)
         self.assertIn("blender-mcp-cli skill path", readme)
         self.assertIn("blender-mcp-cli skill install", readme)
+        self.assertIn("gh skill install", readme)
+        self.assertIn("blender-mcp-cli-skill-X.Y.Z.zip", readme)
         self.assertIsNone(re.search(r"(?<!-mcp)blender-cli", skill + readme))
 
     def test_wheel_publishes_the_skill(self):
@@ -64,13 +82,24 @@ class ReleaseContractTests(unittest.TestCase):
             '"share/blender-mcp-cli/skills/blender-mcp-cli"', pyproject
         )
         self.assertIn("skills/blender-mcp-cli/SKILL.md", pyproject)
+        self.assertIn("skills/blender-mcp-cli/LICENSE", pyproject)
         self.assertIn("skills/blender-mcp-cli/agents/openai.yaml", pyproject)
+
+    def test_standalone_skill_carries_the_project_license(self):
+        project_license = (PROJECT_ROOT / "LICENSE").read_bytes()
+        skill_license = (
+            PROJECT_ROOT / "skills/blender-mcp-cli/LICENSE"
+        ).read_bytes()
+
+        self.assertEqual(skill_license, project_license)
 
     def test_source_distribution_includes_addon_skill_and_tests(self):
         manifest = (PROJECT_ROOT / "MANIFEST.in").read_text(encoding="utf-8")
 
         self.assertIn("include addon.py", manifest)
+        self.assertIn("include skills/blender-mcp-cli/LICENSE", manifest)
         self.assertIn("recursive-include skills/blender-mcp-cli", manifest)
+        self.assertIn("recursive-include scripts *.py", manifest)
         self.assertIn("recursive-include tests *.py", manifest)
 
 

@@ -1,3 +1,5 @@
 include addon.py
+include skills/blender-mcp-cli/LICENSE
 recursive-include skills/blender-mcp-cli *.md *.yaml
+recursive-include scripts *.py
 recursive-include tests *.py

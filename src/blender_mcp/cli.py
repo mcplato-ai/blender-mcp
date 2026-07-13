@@ -31,7 +31,7 @@ EXIT_OPERATION = 7
 EXIT_LOCAL_IO = 8
 
 SKILL_NAME = "blender-mcp-cli"
-SKILL_FILES = ("SKILL.md", "agents/openai.yaml")
+SKILL_FILES = ("SKILL.md", "LICENSE", "agents/openai.yaml")
 SKILL_DATA_FILE = (
     "share/blender-mcp-cli/skills/blender-mcp-cli/SKILL.md"
 )
