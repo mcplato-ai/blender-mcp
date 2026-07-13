@@ -10,22 +10,44 @@ add-on endpoint as raw TCP/JSON on `localhost:9876`, not HTTP or MCP.
 
 ## Prepare The Environment
 
-1. Use Blender 3.0 or newer with its GUI. Do not use `blender -b`; the add-on
-   dispatches work through Blender's main event loop.
-2. Obtain `addon.py` from the `mcplato-ai/blender-mcp` repository or its release
-   assets. Install and enable it in Blender through
-   `Edit > Preferences > Add-ons`.
-3. Confirm the BlenderMCP sidebar reports that its socket server is running on
-   port `9876`. The current add-on normally starts it automatically. Keep a
-   useful `VIEW_3D` area visible when screenshots are required.
-4. Install the CLI:
+1. Use Python 3.10 or newer and Blender 3.0 or newer with its GUI. Do not use
+   `blender -b`; the add-on dispatches work through Blender's main event loop.
+2. Install the CLI and Skill. Ensure the installed `blender-mcp-cli` script is
+   on `PATH`; `pipx` or `uv tool` can provide an isolated installation when
+   preferred.
 
 ```bash
 python -m pip install --upgrade blender-mcp-cli
+blender-mcp-cli skill install
 ```
 
-For a source checkout, use `python -m pip install -e .` from the repository root.
+The package publishes this Skill in both its wheel and source distribution.
+`skill install` copies it to
+`${CODEX_HOME:-~/.codex}/skills/blender-mcp-cli`. Use
+`blender-mcp-cli skill path` to inspect the bundled source or
+`blender-mcp-cli skill install --help` to choose another exact destination.
 
+For a source checkout, use `python -m pip install -e .` from the repository
+root, then run the same Skill install command.
+
+After first installing the Skill, start a new Codex session so it is discovered
+before invoking `$blender-mcp-cli`.
+
+3. Use the unchanged `addon.py` from the same `mcplato-ai/blender-mcp` release
+   as the installed CLI. A POSIX shell can download the matching tagged file:
+
+```bash
+CLI_VERSION="$(blender-mcp-cli --version | awk '{print $2}')"
+curl -fL -o addon.py \
+  "https://raw.githubusercontent.com/mcplato-ai/blender-mcp/v${CLI_VERSION}/addon.py"
+```
+
+For a source checkout, use its repository-root `addon.py`.
+
+4. In Blender, open `Edit > Preferences > Add-ons`, install `addon.py`, and
+   enable it. In a 3D Viewport press `N`, open the `BlenderMCP` tab, and confirm
+   it says `Running on port 9876`. If it did not auto-start, click
+   `Connect to MCP server`. Keep a useful 3D viewport visible for screenshots.
 5. Verify installation and connectivity:
 
 ```bash
@@ -48,8 +70,10 @@ using their commands. API credentials live on the Blender side.
 2. Inspect before changing anything:
 
 ```bash
-blender-mcp-cli --pretty scene info
-blender-mcp-cli viewport screenshot /absolute/path/before.png
+RUN_DIR=/absolute/path/blender-run
+mkdir -p "$RUN_DIR"
+blender-mcp-cli --pretty scene info >"$RUN_DIR/before.json"
+blender-mcp-cli viewport screenshot "$RUN_DIR/before.png"
 ```
 
 3. Prefer first-class subcommands. Use `raw call` only for an add-on command or
@@ -62,15 +86,31 @@ blender-mcp-cli code exec --file /absolute/path/change_scene.py
 
 blender-mcp-cli code exec --stdin <<'PY'
 import bpy
-print(bpy.context.scene.name)
+import json
+
+obj = bpy.data.objects.get("Cube")
+if obj is None:
+    raise RuntimeError("Default Cube was not found")
+obj.location.z = 1.0
+bpy.context.view_layer.update()
+print(json.dumps({"name": obj.name, "location": list(obj.location)}))
 PY
 ```
 
 Only send trusted code. `code exec` is unsandboxed and can access everything the
 Blender process can access. Print values that must be returned to the caller.
 
-5. Inspect the scene and capture another screenshot after mutations. Correct
-   failures before reporting completion.
+5. Inspect the scene and capture another screenshot after mutations:
+
+```bash
+blender-mcp-cli --pretty scene info >"$RUN_DIR/after.json"
+blender-mcp-cli viewport screenshot "$RUN_DIR/after.png"
+```
+
+Open and compare both PNGs with the available image-viewing tool. Confirm the
+expected visible change and absence of unintended changes. If the viewport is
+poorly framed, correct the view and capture again. Do not report success until
+the structural output and visual result agree.
 
 ## Interpret Results
 

@@ -35,6 +35,14 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 package-dir = {"" = "src"}
 
+[tool.setuptools.data-files]
+"share/blender-mcp-cli/skills/blender-mcp-cli" = [
+    "skills/blender-mcp-cli/SKILL.md",
+]
+"share/blender-mcp-cli/skills/blender-mcp-cli/agents" = [
+    "skills/blender-mcp-cli/agents/openai.yaml",
+]
+
 [project.urls]
 "Homepage" = "https://github.com/mcplato-ai/blender-mcp"
 "Bug Tracker" = "https://github.com/mcplato-ai/blender-mcp/issues"

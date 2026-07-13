@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import base64
 import contextlib
 import io
@@ -7,7 +8,9 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+from blender_mcp import cli as cli_module
 from blender_mcp.cli import build_parser, main
 
 from tests.fake_blender import FakeBlenderServer
@@ -28,6 +31,7 @@ class BlenderCLITests(unittest.TestCase):
         self.assertEqual(parser.prog, "blender-mcp-cli")
         for command in (
             "schema",
+            "skill",
             "status",
             "scene",
             "object",
@@ -51,6 +55,150 @@ class BlenderCLITests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertGreaterEqual(len(payload["result"]["commands"]), 24)
         self.assertIn("not HTTP", payload["result"]["transport"]["notes"][0])
+
+    def test_skill_path_is_local_and_lists_published_files(self):
+        exit_code, stdout, stderr = run_cli(["skill", "path"])
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, "")
+        result = json.loads(stdout)["result"]
+        skill_path = Path(result["path"])
+        self.assertEqual(
+            result["files"], ["SKILL.md", "agents/openai.yaml"]
+        )
+        self.assertTrue((skill_path / "SKILL.md").is_file())
+        self.assertTrue((skill_path / "agents/openai.yaml").is_file())
+
+    def test_skill_install_help_documents_destination_and_overwrite(self):
+        parser = build_parser()
+        skill_action = next(
+            action
+            for action in parser._actions
+            if isinstance(action, argparse._SubParsersAction)
+        )
+        skill_parser = skill_action.choices["skill"]
+        install_action = next(
+            action
+            for action in skill_parser._actions
+            if isinstance(action, argparse._SubParsersAction)
+        )
+        help_text = install_action.choices["install"].format_help()
+
+        self.assertIn("CODEX_HOME", help_text)
+        self.assertIn("--target", help_text)
+        self.assertIn("--force", help_text)
+
+    def test_skill_install_requires_force_and_preserves_other_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "installed-skill"
+            exit_code, stdout, stderr = run_cli(
+                ["skill", "install", "--target", str(target)]
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(stderr, "")
+            self.assertEqual(
+                json.loads(stdout)["result"]["target"], str(target.resolve())
+            )
+            self.assertTrue((target / "SKILL.md").is_file())
+            self.assertTrue((target / "agents/openai.yaml").is_file())
+
+            marker = target / "keep.txt"
+            marker.write_text("keep", encoding="utf-8")
+            exit_code, stdout, stderr = run_cli(
+                ["skill", "install", "--target", str(target)]
+            )
+            self.assertEqual(exit_code, 8)
+            self.assertEqual(stdout, "")
+            self.assertEqual(json.loads(stderr)["error"]["kind"], "local_io_error")
+
+            exit_code, stdout, stderr = run_cli(
+                ["skill", "install", "--target", str(target), "--force"]
+            )
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(stderr, "")
+            self.assertEqual(marker.read_text(encoding="utf-8"), "keep")
+
+    def test_skill_install_uses_codex_home_by_default(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(
+            cli_module.os.environ, {"CODEX_HOME": directory}
+        ):
+            exit_code, stdout, stderr = run_cli(["skill", "install"])
+
+            expected = Path(directory).resolve() / "skills/blender-mcp-cli"
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(stderr, "")
+            self.assertEqual(json.loads(stdout)["result"]["target"], str(expected))
+            self.assertTrue((expected / "SKILL.md").is_file())
+            self.assertTrue((expected / "agents/openai.yaml").is_file())
+
+    def test_skill_install_force_rejects_destination_symlinks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "installed-skill"
+            target.mkdir()
+            victim = root / "victim.txt"
+            victim.write_text("unchanged", encoding="utf-8")
+            try:
+                (target / "SKILL.md").symlink_to(victim)
+            except OSError as exc:
+                self.skipTest(f"symbolic links are not available: {exc}")
+
+            exit_code, stdout, stderr = run_cli(
+                ["skill", "install", "--target", str(target), "--force"]
+            )
+
+            self.assertEqual(exit_code, 8)
+            self.assertEqual(stdout, "")
+            self.assertIn("symbolic link", json.loads(stderr)["error"]["message"])
+            self.assertEqual(victim.read_text(encoding="utf-8"), "unchanged")
+
+    def test_skill_install_force_rejects_symlinked_agents_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "installed-skill"
+            target.mkdir()
+            victim = root / "victim-agents"
+            victim.mkdir()
+            marker = victim / "keep.txt"
+            marker.write_text("unchanged", encoding="utf-8")
+            try:
+                (target / "agents").symlink_to(victim, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"symbolic links are not available: {exc}")
+
+            exit_code, stdout, stderr = run_cli(
+                ["skill", "install", "--target", str(target), "--force"]
+            )
+
+            self.assertEqual(exit_code, 8)
+            self.assertEqual(stdout, "")
+            self.assertIn("symbolic link", json.loads(stderr)["error"]["message"])
+            self.assertEqual(marker.read_text(encoding="utf-8"), "unchanged")
+            self.assertFalse((victim / "openai.yaml").exists())
+
+    def test_skill_path_supports_pip_target_layout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory)
+            module_file = target / "blender_mcp/cli.py"
+            module_file.parent.mkdir()
+            module_file.touch()
+            skill_path = (
+                target / "share/blender-mcp-cli/skills/blender-mcp-cli"
+            )
+            (skill_path / "agents").mkdir(parents=True)
+            (skill_path / "SKILL.md").write_text("skill", encoding="utf-8")
+            (skill_path / "agents/openai.yaml").write_text(
+                "interface: {}", encoding="utf-8"
+            )
+
+            with mock.patch.object(cli_module, "__file__", str(module_file)), mock.patch(
+                "blender_mcp.cli.distribution",
+                side_effect=cli_module.PackageNotFoundError,
+            ):
+                resolved = cli_module._bundled_skill_path()
+
+            self.assertEqual(resolved, skill_path.resolve())
 
     def test_scene_info_writes_json_envelope(self):
         response = {"status": "success", "result": {"name": "Scene", "object_count": 1}}

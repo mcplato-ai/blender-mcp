@@ -46,7 +46,19 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertNotIn("TODO", skill)
         self.assertIn("$blender-mcp-cli", metadata)
         self.assertIn("pipx install blender-mcp-cli", readme)
+        self.assertIn("blender-mcp-cli skill path", readme)
+        self.assertIn("blender-mcp-cli skill install", readme)
         self.assertIsNone(re.search(r"(?<!-mcp)blender-cli", skill + readme))
+
+    def test_wheel_publishes_the_skill(self):
+        pyproject = (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+        self.assertIn('[tool.setuptools.data-files]', pyproject)
+        self.assertIn(
+            '"share/blender-mcp-cli/skills/blender-mcp-cli"', pyproject
+        )
+        self.assertIn("skills/blender-mcp-cli/SKILL.md", pyproject)
+        self.assertIn("skills/blender-mcp-cli/agents/openai.yaml", pyproject)
 
     def test_source_distribution_includes_addon_skill_and_tests(self):
         manifest = (PROJECT_ROOT / "MANIFEST.in").read_text(encoding="utf-8")

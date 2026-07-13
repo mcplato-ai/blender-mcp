@@ -7,7 +7,9 @@ import base64
 import binascii
 import json
 import os
+import shutil
 import sys
+from importlib.metadata import PackageNotFoundError, distribution
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
@@ -27,6 +29,12 @@ EXIT_INTERNAL = 1
 EXIT_USAGE = 2
 EXIT_OPERATION = 7
 EXIT_LOCAL_IO = 8
+
+SKILL_NAME = "blender-mcp-cli"
+SKILL_FILES = ("SKILL.md", "agents/openai.yaml")
+SKILL_DATA_FILE = (
+    "share/blender-mcp-cli/skills/blender-mcp-cli/SKILL.md"
+)
 
 
 class CLIError(Exception):
@@ -152,6 +160,7 @@ object to stderr and return a non-zero exit code.""",
   blender-mcp-cli code exec --file create_scene.py
   blender-mcp-cli viewport screenshot ./viewport.png --max-size 1000
   blender-mcp-cli raw call get_scene_info
+  blender-mcp-cli skill install
   blender-mcp-cli --pretty schema
 
 Environment:
@@ -198,6 +207,7 @@ Exit codes:
 
     commands = _add_subcommands(parser)
     _build_schema_command(commands)
+    _build_skill_commands(commands)
     _build_status_commands(commands)
     _build_scene_commands(commands)
     _build_object_commands(commands)
@@ -218,6 +228,50 @@ def _build_schema_command(commands) -> None:
         description="Print the direct Blender command catalog for LLM discovery.",
     )
     parser.set_defaults(handler=_handle_schema, command_type="schema", local_only=True)
+
+
+def _build_skill_commands(commands) -> None:
+    parser = commands.add_parser(
+        "skill",
+        help="locate or install the bundled Codex Skill",
+        description="Locate or install the Codex Skill shipped with this package.",
+    )
+    subcommands = _add_subcommands(parser, "skill commands")
+
+    path = subcommands.add_parser(
+        "path", help="print the bundled Skill directory"
+    )
+    path.set_defaults(
+        handler=_handle_skill_path,
+        command_type="skill_path",
+        local_only=True,
+    )
+
+    install = subcommands.add_parser(
+        "install",
+        help="install the bundled Skill for Codex",
+        description="""Install the bundled Skill for Codex.
+
+By default the exact destination is
+${CODEX_HOME:-~/.codex}/skills/blender-mcp-cli. Use --target to select a
+different exact Skill directory.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    install.add_argument(
+        "--target",
+        metavar="DIR",
+        help="exact destination Skill directory",
+    )
+    install.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite the bundled Skill files when the destination is not empty",
+    )
+    install.set_defaults(
+        handler=_handle_skill_install,
+        command_type="skill_install",
+        local_only=True,
+    )
 
 
 def _build_status_commands(commands) -> None:
@@ -766,6 +820,113 @@ def _handle_schema(args: argparse.Namespace, client: BlenderClient | None) -> An
     return COMMAND_SCHEMA
 
 
+def _handle_skill_path(
+    args: argparse.Namespace, client: BlenderClient | None
+) -> Any:
+    source = _bundled_skill_path()
+    return {
+        "path": str(source),
+        "files": list(SKILL_FILES),
+    }
+
+
+def _handle_skill_install(
+    args: argparse.Namespace, client: BlenderClient | None
+) -> Any:
+    source = _bundled_skill_path()
+    requested_target = (
+        Path(args.target).expanduser() if args.target else _default_skill_target()
+    )
+    copied: list[str] = []
+    try:
+        if requested_target.is_symlink():
+            raise LocalIOError(
+                f"Skill destination must not be a symbolic link: {requested_target}"
+            )
+        target = requested_target.resolve()
+        if target.exists() and not target.is_dir():
+            raise LocalIOError(f"Skill destination is not a directory: {target}")
+        if target.is_dir() and any(target.iterdir()) and not args.force:
+            raise LocalIOError(
+                f"Skill destination is not empty: {target}; use --force to "
+                "overwrite the bundled Skill files"
+            )
+
+        _reject_skill_destination_symlinks(target)
+        target.mkdir(parents=True, exist_ok=True)
+        for relative_name in SKILL_FILES:
+            source_file = source / relative_name
+            target_file = target / relative_name
+            target_file.parent.mkdir(parents=True, exist_ok=True)
+            if source_file.resolve() != target_file.resolve():
+                shutil.copy2(source_file, target_file)
+            copied.append(relative_name)
+    except LocalIOError:
+        raise
+    except (OSError, RuntimeError) as exc:
+        raise LocalIOError(
+            f"Could not inspect or install Skill at {requested_target}: {exc}"
+        ) from exc
+
+    return {
+        "source": str(source),
+        "target": str(target),
+        "files": copied,
+    }
+
+
+def _reject_skill_destination_symlinks(target: Path) -> None:
+    for relative_name in SKILL_FILES:
+        current = target
+        for part in Path(relative_name).parts:
+            current /= part
+            if current.is_symlink():
+                raise LocalIOError(
+                    "Refusing to overwrite a symbolic link inside the Skill "
+                    f"destination: {current}"
+                )
+
+
+def _bundled_skill_path() -> Path:
+    installed_root = Path(__file__).resolve().parents[1]
+    candidates = [
+        Path(__file__).resolve().parents[2] / "skills" / SKILL_NAME,
+        installed_root / Path(SKILL_DATA_FILE).parent,
+    ]
+
+    try:
+        installed_distribution = distribution("blender-mcp-cli")
+    except PackageNotFoundError:
+        installed_distribution = None
+
+    if installed_distribution is not None:
+        for packaged_file in installed_distribution.files or ():
+            if packaged_file.as_posix().endswith(SKILL_DATA_FILE):
+                candidates.append(
+                    Path(installed_distribution.locate_file(packaged_file)).parent
+                )
+
+    checked: list[str] = []
+    for candidate in candidates:
+        candidate = candidate.resolve()
+        if str(candidate) in checked:
+            continue
+        checked.append(str(candidate))
+        if all((candidate / relative_name).is_file() for relative_name in SKILL_FILES):
+            return candidate
+
+    raise LocalIOError(
+        "Bundled Skill files were not found; reinstall blender-mcp-cli",
+        details={"checked": checked, "required_files": list(SKILL_FILES)},
+    )
+
+
+def _default_skill_target() -> Path:
+    codex_home = os.getenv("CODEX_HOME")
+    base = Path(codex_home).expanduser() if codex_home else Path.home() / ".codex"
+    return base / "skills" / SKILL_NAME
+
+
 def _execute(client: BlenderClient, command_type: str, params: dict[str, Any]) -> Any:
     result = client.call(command_type, params)
     _raise_for_operation_failure(result)
@@ -935,6 +1096,18 @@ COMMAND_SCHEMA = {
         {"cli": "hunyuan3d poll JOB_ID", "type": "poll_hunyuan_job_status", "params": {"job_id": "string"}},
         {"cli": "hunyuan3d import NAME ZIP_URL", "type": "import_generated_asset_hunyuan", "params": {"name": "string", "zip_file_url": "HTTP(S) URL"}},
         {"cli": "raw call TYPE", "type": "ANY_ADDON_COMMAND", "params": "any JSON object"},
+    ],
+    "local_commands": [
+        {
+            "cli": "skill path",
+            "type": "skill_path",
+            "description": "locate the Skill shipped with the installed package",
+        },
+        {
+            "cli": "skill install [--target DIR] [--force]",
+            "type": "skill_install",
+            "description": "install the bundled Skill into a Codex skills directory",
+        },
     ],
     "exit_codes": {
         "0": "success",

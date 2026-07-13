@@ -69,6 +69,8 @@ jobs:
           .smoke/bin/python -m pip install --no-deps dist/blender_mcp_cli-*.whl
           .smoke/bin/python - <<'PY'
           import json
+          import os
+          from pathlib import Path
           import subprocess
           import tomllib
 
@@ -88,6 +90,62 @@ jobs:
           schema = json.loads(subprocess.check_output([command, "schema"], text=True))
           if not schema.get("ok") or len(schema["result"]["commands"]) < 24:
               raise SystemExit("CLI schema smoke test failed")
+
+          skill = json.loads(
+              subprocess.check_output([command, "skill", "path"], text=True)
+          )["result"]
+          skill_path = Path(skill["path"])
+          for relative_name in ("SKILL.md", "agents/openai.yaml"):
+              if not (skill_path / relative_name).is_file():
+                  raise SystemExit(f"wheel is missing bundled Skill file {relative_name}")
+
+          install_target = Path(".smoke-skill").resolve()
+          installed = json.loads(
+              subprocess.check_output(
+                  [
+                      command,
+                      "skill",
+                      "install",
+                      "--target",
+                      str(install_target),
+                  ],
+                  text=True,
+              )
+          )["result"]
+          if Path(installed["target"]) != install_target:
+              raise SystemExit("Skill install smoke test returned the wrong target")
+          for relative_name in ("SKILL.md", "agents/openai.yaml"):
+              if not (install_target / relative_name).is_file():
+                  raise SystemExit(f"Skill install missed {relative_name}")
+
+          wheel = next(Path("dist").glob("blender_mcp_cli-*.whl")).resolve()
+          target_site = Path(".smoke-target").resolve()
+          python = ".smoke/bin/python"
+          subprocess.check_call(
+              [
+                  python,
+                  "-m",
+                  "pip",
+                  "install",
+                  "--no-deps",
+                  "--target",
+                  str(target_site),
+                  str(wheel),
+              ]
+          )
+          target_environment = dict(os.environ, PYTHONPATH=str(target_site))
+          target_skill = json.loads(
+              subprocess.check_output(
+                  [python, "-m", "blender_mcp.cli", "skill", "path"],
+                  env=target_environment,
+                  text=True,
+              )
+          )["result"]
+          expected_target_skill = (
+              target_site / "share/blender-mcp-cli/skills/blender-mcp-cli"
+          )
+          if Path(target_skill["path"]) != expected_target_skill:
+              raise SystemExit("pip --target Skill discovery smoke test failed")
           PY
       - name: Upload distributions
         uses: actions/upload-artifact@v4

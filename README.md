@@ -25,7 +25,7 @@ Give feedback, get inspired, and build on top of the MCP: [Discord](https://disc
 
 ## Highlights
 
-For the current version and changelog, see the [releases page](https://github.com/ahujasid/blender-mcp/releases).
+For the current version and changelog, see the [releases page](https://github.com/mcplato-ai/blender-mcp/releases).
 
 - Added Hunyuan3D support
 - View screenshots for Blender viewport to better understand the scene
@@ -73,6 +73,7 @@ pipx install blender-mcp-cli
 blender-mcp-cli --help
 blender-mcp-cli --pretty schema
 blender-mcp-cli --pretty status all
+blender-mcp-cli skill install
 ```
 
 Alternatively use `uv tool install blender-mcp-cli`. For a source checkout,
@@ -117,10 +118,26 @@ blender-mcp-cli hunyuan3d generate --help
 
 ### Codex Skill
 
-The repository and source distribution include
-`skills/blender-mcp-cli/SKILL.md`. Invoke it as `$blender-mcp-cli` when an agent
-needs the environment setup, command workflow, timeout rules, and verification
-sequence in context.
+The wheel and source distribution publish the Codex Skill together with the
+CLI. Install it into the default Codex skills directory and inspect the
+resolved paths with:
+
+```bash
+blender-mcp-cli skill path
+blender-mcp-cli skill install
+```
+
+The default destination is
+`${CODEX_HOME:-~/.codex}/skills/blender-mcp-cli`. Use
+`blender-mcp-cli skill install --help` for `--target` and safe overwrite
+options. After installation, invoke `$blender-mcp-cli` when an agent needs the
+environment setup, direct CLI workflow, timeout rules, and visual verification
+sequence in context. Start a new Codex session after the first Skill install so
+Codex discovers it.
+
+For a source checkout, the same commands use
+`skills/blender-mcp-cli/SKILL.md` directly, so local Skill changes can be tested
+before publishing.
 
 The default connection can be overridden with `BLENDER_HOST`, `BLENDER_PORT`,
 `BLENDER_CONNECT_TIMEOUT`, and `BLENDER_TIMEOUT`, or the corresponding CLI

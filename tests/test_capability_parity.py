@@ -14,7 +14,13 @@ LEGACY_CLIENT_PATHS = (
     PROJECT_ROOT / "src" / "blender_mcp" / "server.py",
     PROJECT_ROOT / "src" / "blender_mcp" / "telemetry.py",
 )
-CLI_ONLY_COMMAND_TYPES = {"raw_call", "schema", "status_all"}
+CLI_ONLY_COMMAND_TYPES = {
+    "raw_call",
+    "schema",
+    "skill_install",
+    "skill_path",
+    "status_all",
+}
 SCHEMA_RAW_COMMAND_TYPE = "ANY_ADDON_COMMAND"
 
 
