@@ -12,7 +12,12 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SKILL_NAME = "blender-mcp-cli"
-SKILL_FILES = ("SKILL.md", "LICENSE", "agents/openai.yaml")
+SKILL_SOURCES = (
+    ("SKILL.md", Path("skills/blender-mcp-cli/SKILL.md")),
+    ("LICENSE", Path("skills/blender-mcp-cli/LICENSE")),
+    ("addon.py", Path("addon.py")),
+    ("agents/openai.yaml", Path("skills/blender-mcp-cli/agents/openai.yaml")),
+)
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 
 
@@ -39,16 +44,18 @@ def _validate_version(version: str) -> str:
 
 def build_archive(output_dir: Path, version: str) -> Path:
     version = _validate_version(version)
-    skill_dir = PROJECT_ROOT / "skills" / SKILL_NAME
-    sources = [(relative, skill_dir / relative) for relative in SKILL_FILES]
+    sources = [
+        (archive_name, PROJECT_ROOT / source_name)
+        for archive_name, source_name in SKILL_SOURCES
+    ]
     missing = [str(path) for _, path in sources if not path.is_file()]
     if missing:
         raise FileNotFoundError("missing Skill files: " + ", ".join(missing))
     for _, source in sources:
         if source.is_symlink() or not source.resolve().is_relative_to(
-            skill_dir.resolve()
+            PROJECT_ROOT.resolve()
         ):
-            raise ValueError(f"Skill source must be a regular in-tree file: {source}")
+            raise ValueError(f"Archive source must be a regular in-tree file: {source}")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     archive = output_dir / f"{SKILL_NAME}-skill-{version}.zip"

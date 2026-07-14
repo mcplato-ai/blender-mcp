@@ -37,7 +37,9 @@ For the current version and changelog, see the [releases page](https://github.co
 
 ### Installing a new version (existing users)
 - For newcomers, you can go straight to Installation. For existing users, see the points below
-- Download the latest addon.py file and replace the older one, then add it to Blender
+- Run `blender-mcp-cli --pretty skill path` and replace the Blender add-on with
+  the version-matched file reported as `addon_path`. The same `addon.py` is also
+  attached directly to every GitHub Release.
 - Delete the MCP server from Claude and add it back again, and you should be good to go!
 
 
@@ -66,14 +68,21 @@ The `blender-mcp-cli` command is intended for scripts, agents, and LLM clients t
 do not want an MCP host. It uses only the existing Blender addon socket and does
 not import or start FastMCP.
 
-Install the package, enable the addon in Blender, and verify the CLI:
+Install the package and locate its version-matched Blender add-on:
 
 ```bash
 pipx install blender-mcp-cli
 blender-mcp-cli --help
+blender-mcp-cli --pretty skill path
+```
+
+Select the returned `result.addon_path` in Blender's
+`Edit > Preferences > Add-ons > Install...`, enable the add-on, and start its
+socket from the `BlenderMCP` sidebar. Then verify the direct client:
+
+```bash
 blender-mcp-cli --pretty schema
 blender-mcp-cli --pretty status all
-blender-mcp-cli skill install
 ```
 
 Alternatively use `uv tool install blender-mcp-cli`. For a source checkout,
@@ -119,8 +128,9 @@ blender-mcp-cli hunyuan3d generate --help
 ### Codex Skill
 
 Every GitHub Release publishes a standalone
-`blender-mcp-cli-skill-X.Y.Z.zip` containing only the installable Skill. With a
-current GitHub CLI, install only the latest tagged Skill at user scope:
+`blender-mcp-cli-skill-X.Y.Z.zip` containing the installable Skill and the exact
+version-matched Blender `addon.py`. With a current GitHub CLI, install only the
+latest tagged Skill at user scope:
 
 ```bash
 gh skill install mcplato-ai/blender-mcp blender-mcp-cli \
@@ -145,12 +155,18 @@ Skill does not install the Python CLI; install `blender-mcp-cli` separately
 before controlling Blender.
 
 The wheel and source distribution also publish the same Skill together with
-the CLI. Install or inspect that bundled copy with:
+the CLI. The release workflow injects the repository-root `addon.py` into the
+wheel and standalone Skill without maintaining a second source copy. Install
+or inspect that bundled copy with:
 
 ```bash
 blender-mcp-cli skill path
 blender-mcp-cli skill install
 ```
+
+`skill path` reports an explicit `addon_path`. Select that file from Blender's
+`Edit > Preferences > Add-ons > Install...`. `skill install` also copies the
+same file into the installed Skill directory.
 
 The default destination is
 `${CODEX_HOME:-~/.codex}/skills/blender-mcp-cli`. Use
@@ -173,13 +189,19 @@ through a controlled tunnel rather than exposing the socket publicly.
 The GitHub workflow builds and tests every push and pull request. Publishing is
 triggered by pushing a `vX.Y.Z` tag that matches the version in
 `pyproject.toml`. The workflow creates a draft GitHub Release, attaches and
-verifies the standalone Skill ZIP, publishes the Release, and only then
-publishes the Python distributions to PyPI. This ordering supports immutable
-GitHub Releases and prevents PyPI publication when the Skill asset failed.
+verifies the standalone Skill ZIP, wheel, source distribution, and the direct
+Blender `addon.py`, publishes the Release, and only then publishes the Python
+distributions to PyPI. This ordering supports immutable GitHub Releases and
+leaves every built artifact available from GitHub even when PyPI is temporarily
+unavailable.
 
 Configure a PyPI Trusted Publisher for repository `mcplato-ai/blender-mcp`,
 workflow `publish.yml`, and environment `pypi`; no long-lived PyPI token is
-required in GitHub secrets.
+required in GitHub secrets. Before the first upload, create a Pending Publisher
+for project `blender-mcp-cli` with owner `mcplato-ai`, repository
+`blender-mcp`, workflow `publish.yml`, and environment `pypi`. PyPI rejects the
+OIDC exchange with `invalid-publisher` until this one-time account setting
+exists.
 
 A maintainer with a current GitHub CLI can validate the Skill and create the
 release that triggers both publications:
@@ -372,11 +394,13 @@ _Prerequisites_: Make sure you have [Visual Studio Code](https://code.visualstud
 
 ### Installing the Blender Addon
 
-1. Download the `addon.py` file from this repo
-1. Open Blender
-2. Go to Edit > Preferences > Add-ons
-3. Click "Install..." and select the `addon.py` file
-4. Enable the addon by checking the box next to "Interface: Blender MCP"
+1. Run `blender-mcp-cli --pretty skill path` and note the returned
+   `addon_path`. Alternatively, download the `addon.py` asset from the matching
+   GitHub Release.
+2. Open Blender.
+3. Go to Edit > Preferences > Add-ons.
+4. Click "Install..." and select that `addon.py` file.
+5. Enable the addon by checking the box next to "Interface: Blender MCP".
 
 
 ## Usage

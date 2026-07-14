@@ -16,6 +16,9 @@ from blender_mcp.cli import build_parser, main
 from tests.fake_blender import FakeBlenderServer
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
 def run_cli(arguments: list[str]):
     stdout = io.StringIO()
     stderr = io.StringIO()
@@ -66,9 +69,18 @@ class BlenderCLITests(unittest.TestCase):
         self.assertEqual(
             result["files"], ["SKILL.md", "LICENSE", "agents/openai.yaml"]
         )
+        self.assertEqual(
+            result["install_files"],
+            ["SKILL.md", "LICENSE", "addon.py", "agents/openai.yaml"],
+        )
         self.assertTrue((skill_path / "SKILL.md").is_file())
         self.assertTrue((skill_path / "LICENSE").is_file())
         self.assertTrue((skill_path / "agents/openai.yaml").is_file())
+        self.assertEqual(Path(result["addon_path"]), (PROJECT_ROOT / "addon.py"))
+        self.assertEqual(
+            Path(result["addon_path"]).read_bytes(),
+            (PROJECT_ROOT / "addon.py").read_bytes(),
+        )
 
     def test_skill_install_help_documents_destination_and_overwrite(self):
         parser = build_parser()
@@ -86,6 +98,7 @@ class BlenderCLITests(unittest.TestCase):
         help_text = install_action.choices["install"].format_help()
 
         self.assertIn("CODEX_HOME", help_text)
+        self.assertIn("addon.py", help_text)
         self.assertIn("--target", help_text)
         self.assertIn("--force", help_text)
 
@@ -103,7 +116,16 @@ class BlenderCLITests(unittest.TestCase):
             )
             self.assertTrue((target / "SKILL.md").is_file())
             self.assertTrue((target / "LICENSE").is_file())
+            self.assertTrue((target / "addon.py").is_file())
             self.assertTrue((target / "agents/openai.yaml").is_file())
+            self.assertEqual(
+                (target / "addon.py").read_bytes(),
+                (PROJECT_ROOT / "addon.py").read_bytes(),
+            )
+            self.assertEqual(
+                Path(json.loads(stdout)["result"]["addon_path"]),
+                target.resolve() / "addon.py",
+            )
 
             marker = target / "keep.txt"
             marker.write_text("keep", encoding="utf-8")
@@ -133,6 +155,7 @@ class BlenderCLITests(unittest.TestCase):
             self.assertEqual(json.loads(stdout)["result"]["target"], str(expected))
             self.assertTrue((expected / "SKILL.md").is_file())
             self.assertTrue((expected / "LICENSE").is_file())
+            self.assertTrue((expected / "addon.py").is_file())
             self.assertTrue((expected / "agents/openai.yaml").is_file())
 
     def test_skill_install_force_rejects_destination_symlinks(self):
@@ -193,6 +216,7 @@ class BlenderCLITests(unittest.TestCase):
             (skill_path / "agents").mkdir(parents=True)
             (skill_path / "SKILL.md").write_text("skill", encoding="utf-8")
             (skill_path / "LICENSE").write_text("license", encoding="utf-8")
+            (skill_path / "addon.py").write_text("addon", encoding="utf-8")
             (skill_path / "agents/openai.yaml").write_text(
                 "interface: {}", encoding="utf-8"
             )
@@ -215,6 +239,10 @@ class BlenderCLITests(unittest.TestCase):
                 resolved = cli_module._bundled_skill_path()
 
             self.assertEqual(resolved, skill_path.resolve())
+            self.assertEqual(
+                cli_module._bundled_addon_path(resolved),
+                (skill_path / "addon.py").resolve(),
+            )
 
     def test_skill_path_prefers_pip_target_data_when_target_is_named_src(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -229,6 +257,7 @@ class BlenderCLITests(unittest.TestCase):
             (skill_path / "agents").mkdir(parents=True)
             (skill_path / "SKILL.md").write_text("skill", encoding="utf-8")
             (skill_path / "LICENSE").write_text("license", encoding="utf-8")
+            (skill_path / "addon.py").write_text("addon", encoding="utf-8")
             (skill_path / "agents/openai.yaml").write_text(
                 "interface: {}", encoding="utf-8"
             )
@@ -251,6 +280,10 @@ class BlenderCLITests(unittest.TestCase):
                 resolved = cli_module._bundled_skill_path()
 
             self.assertEqual(resolved, skill_path.resolve())
+            self.assertEqual(
+                cli_module._bundled_addon_path(resolved),
+                (skill_path / "addon.py").resolve(),
+            )
 
     def test_scene_info_writes_json_envelope(self):
         response = {"status": "success", "result": {"name": "Scene", "object_count": 1}}

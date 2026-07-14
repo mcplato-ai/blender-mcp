@@ -20,9 +20,10 @@ python -m pip install --upgrade blender-mcp-cli
 ```
 
 The Skill is published independently as a GitHub Release ZIP and through the
-repository's `skills/` directory. It is also included in the Python wheel and
-source distribution. When installing it from the Python package, run
-`blender-mcp-cli skill install`; this copies it to
+repository's `skills/` directory. CI injects the unchanged repository-root
+`addon.py` into the released Skill ZIP and Python wheel. When installing the
+Skill from the Python package, run `blender-mcp-cli skill install`; this copies
+the Skill and version-matched add-on to
 `${CODEX_HOME:-~/.codex}/skills/blender-mcp-cli`. Use
 `blender-mcp-cli skill path` to inspect the bundled source or
 `blender-mcp-cli skill install --help` to choose another exact destination.
@@ -33,16 +34,15 @@ root, then run the same Skill install command.
 After first installing the Skill, start a new Codex session so it is discovered
 before invoking `$blender-mcp-cli`.
 
-3. Use the unchanged `addon.py` from the same `mcplato-ai/blender-mcp` release
-   as the installed CLI. A POSIX shell can download the matching tagged file:
+3. Locate the unchanged, version-matched `addon.py` bundled during packaging:
 
 ```bash
-CLI_VERSION="$(blender-mcp-cli --version | awk '{print $2}')"
-curl -fL -o addon.py \
-  "https://raw.githubusercontent.com/mcplato-ai/blender-mcp/v${CLI_VERSION}/addon.py"
+blender-mcp-cli --pretty skill path
 ```
 
-For a source checkout, use its repository-root `addon.py`.
+Use the returned `addon_path`. A standalone released Skill also contains
+`addon.py` beside this `SKILL.md`. For a source checkout, `addon_path` resolves
+to the repository-root file.
 
 4. In Blender, open `Edit > Preferences > Add-ons`, install `addon.py`, and
    enable it. In a 3D Viewport press `N`, open the `BlenderMCP` tab, and confirm

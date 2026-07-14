@@ -45,7 +45,14 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn("gh skill publish --dry-run", workflow)
         self.assertIn("name: standalone-skill", workflow)
         self.assertIn("path: skill-dist/*.zip", workflow)
-        self.assertIn("Publish GitHub Release with standalone Skill", workflow)
+        self.assertIn("name: blender-addon", workflow)
+        self.assertIn("path: addon.py", workflow)
+        self.assertIn("Publish GitHub Release assets", workflow)
+        self.assertIn("path: release-assets/", workflow)
+        self.assertIn('asset_dir.glob("blender-mcp-cli-skill-*.zip")', workflow)
+        self.assertIn('asset_dir.glob("blender_mcp_cli-*.whl")', workflow)
+        self.assertIn('asset_dir.glob("blender_mcp_cli-*.tar.gz")', workflow)
+        self.assertIn('asset_dir.glob("addon.py")', workflow)
         self.assertIn("contents: write", workflow)
         self.assertIn('"release",', workflow)
         self.assertIn('"upload",', workflow)
@@ -55,7 +62,7 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn('"--draft=false",', workflow)
         self.assertIn("expected_digest", workflow)
         self.assertIn("def wait_for_release():", workflow)
-        self.assertIn("def wait_for_verified_asset(expected_digest):", workflow)
+        self.assertIn("def wait_for_verified_asset(asset, expected_digest):", workflow)
         self.assertIn("time.monotonic() + poll_timeout", workflow)
 
     def test_skill_and_documentation_use_final_cli_name(self):
@@ -73,6 +80,8 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn("pipx install blender-mcp-cli", readme)
         self.assertIn("blender-mcp-cli skill path", readme)
         self.assertIn("blender-mcp-cli skill install", readme)
+        self.assertIn("addon_path", skill)
+        self.assertIn("addon_path", readme)
         self.assertIn("gh skill install", readme)
         self.assertIn("blender-mcp-cli-skill-X.Y.Z.zip", readme)
         self.assertIsNone(re.search(r"(?<!-mcp)blender-cli", skill + readme))
@@ -86,6 +95,7 @@ class ReleaseContractTests(unittest.TestCase):
         )
         self.assertIn("skills/blender-mcp-cli/SKILL.md", pyproject)
         self.assertIn("skills/blender-mcp-cli/LICENSE", pyproject)
+        self.assertIn('    "addon.py",', pyproject)
         self.assertIn("skills/blender-mcp-cli/agents/openai.yaml", pyproject)
 
     def test_standalone_skill_carries_the_project_license(self):
@@ -95,6 +105,18 @@ class ReleaseContractTests(unittest.TestCase):
         ).read_bytes()
 
         self.assertEqual(skill_license, project_license)
+
+    def test_addon_is_injected_from_the_single_repository_source(self):
+        builder = (PROJECT_ROOT / "scripts/build_skill_archive.py").read_text(
+            encoding="utf-8"
+        )
+        skill = (PROJECT_ROOT / "skills/blender-mcp-cli/SKILL.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertFalse((PROJECT_ROOT / "skills/blender-mcp-cli/addon.py").exists())
+        self.assertIn('(\"addon.py\", Path(\"addon.py\"))', builder)
+        self.assertNotIn("raw.githubusercontent.com", skill)
 
     def test_source_distribution_includes_addon_skill_and_tests(self):
         manifest = (PROJECT_ROOT / "MANIFEST.in").read_text(encoding="utf-8")

@@ -18,6 +18,7 @@ ARCHIVE_NAME = "blender-mcp-cli-skill-9.8.7.zip"
 ARCHIVE_FILES = (
     "blender-mcp-cli/SKILL.md",
     "blender-mcp-cli/LICENSE",
+    "blender-mcp-cli/addon.py",
     "blender-mcp-cli/agents/openai.yaml",
 )
 
@@ -54,6 +55,10 @@ class SkillArchiveTests(unittest.TestCase):
                         bundle.read(f"blender-mcp-cli/{relative_name}"),
                         (SKILL_ROOT / relative_name).read_bytes(),
                     )
+                self.assertEqual(
+                    bundle.read("blender-mcp-cli/addon.py"),
+                    (PROJECT_ROOT / "addon.py").read_bytes(),
+                )
                 for info in bundle.infolist():
                     self.assertEqual(info.date_time, (1980, 1, 1, 0, 0, 0))
                     self.assertEqual(
@@ -72,6 +77,7 @@ class SkillArchiveTests(unittest.TestCase):
             installed = skills_dir / "blender-mcp-cli"
             self.assertTrue((installed / "SKILL.md").is_file())
             self.assertTrue((installed / "LICENSE").is_file())
+            self.assertTrue((installed / "addon.py").is_file())
             self.assertTrue((installed / "agents/openai.yaml").is_file())
 
     def test_archive_is_reproducible(self):
@@ -100,6 +106,7 @@ class SkillArchiveTests(unittest.TestCase):
             except OSError as exc:
                 self.skipTest(f"symbolic links are not available: {exc}")
             (skill / "LICENSE").write_text("license", encoding="utf-8")
+            (root / "addon.py").write_text("addon", encoding="utf-8")
             (skill / "agents/openai.yaml").write_text(
                 "interface: {}", encoding="utf-8"
             )
@@ -107,6 +114,36 @@ class SkillArchiveTests(unittest.TestCase):
             with mock.patch.object(module, "PROJECT_ROOT", root):
                 with self.assertRaisesRegex(ValueError, "regular in-tree file"):
                     module.build_archive(root / "dist", "1.0.0")
+
+    def test_archive_rejects_symlinked_addon_source(self):
+        spec = importlib.util.spec_from_file_location("skill_archive_builder", SCRIPT)
+        if spec is None or spec.loader is None:
+            self.fail("could not load Skill archive builder")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            skill = root / "skills/blender-mcp-cli"
+            (skill / "agents").mkdir(parents=True)
+            (skill / "SKILL.md").write_text("skill", encoding="utf-8")
+            (skill / "LICENSE").write_text("license", encoding="utf-8")
+            (skill / "agents/openai.yaml").write_text(
+                "interface: {}", encoding="utf-8"
+            )
+            outside = root.parent / f"{root.name}-outside-addon.py"
+            outside.write_text("addon", encoding="utf-8")
+            try:
+                (root / "addon.py").symlink_to(outside)
+            except OSError as exc:
+                self.skipTest(f"symbolic links are not available: {exc}")
+
+            try:
+                with mock.patch.object(module, "PROJECT_ROOT", root):
+                    with self.assertRaisesRegex(ValueError, "regular in-tree file"):
+                        module.build_archive(root / "dist", "1.0.0")
+            finally:
+                outside.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 [project]
 name = "blender-mcp-cli"
-version = "1.6.1"
+version = "1.6.2"
 description = "Direct command-line control for the Blender MCP add-on"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -39,6 +39,7 @@ package-dir = {"" = "src"}
 "share/blender-mcp-cli/skills/blender-mcp-cli" = [
     "skills/blender-mcp-cli/SKILL.md",
     "skills/blender-mcp-cli/LICENSE",
+    "addon.py",
 ]
 "share/blender-mcp-cli/skills/blender-mcp-cli/agents" = [
     "skills/blender-mcp-cli/agents/openai.yaml",

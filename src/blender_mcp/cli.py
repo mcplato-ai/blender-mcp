@@ -32,6 +32,7 @@ EXIT_LOCAL_IO = 8
 
 SKILL_NAME = "blender-mcp-cli"
 SKILL_FILES = ("SKILL.md", "LICENSE", "agents/openai.yaml")
+SKILL_INSTALL_FILES = ("SKILL.md", "LICENSE", "addon.py", "agents/openai.yaml")
 SKILL_DATA_FILE = (
     "share/blender-mcp-cli/skills/blender-mcp-cli/SKILL.md"
 )
@@ -233,13 +234,16 @@ def _build_schema_command(commands) -> None:
 def _build_skill_commands(commands) -> None:
     parser = commands.add_parser(
         "skill",
-        help="locate or install the bundled Codex Skill",
-        description="Locate or install the Codex Skill shipped with this package.",
+        help="locate or install the bundled Codex Skill and Blender add-on",
+        description=(
+            "Locate or install the Codex Skill and version-matched Blender "
+            "add-on shipped with this package."
+        ),
     )
     subcommands = _add_subcommands(parser, "skill commands")
 
     path = subcommands.add_parser(
-        "path", help="print the bundled Skill directory"
+        "path", help="print the bundled Skill directory and Blender add-on path"
     )
     path.set_defaults(
         handler=_handle_skill_path,
@@ -249,8 +253,8 @@ def _build_skill_commands(commands) -> None:
 
     install = subcommands.add_parser(
         "install",
-        help="install the bundled Skill for Codex",
-        description="""Install the bundled Skill for Codex.
+        help="install the bundled Skill and Blender add-on for Codex",
+        description="""Install the bundled Skill and version-matched addon.py for Codex.
 
 By default the exact destination is
 ${CODEX_HOME:-~/.codex}/skills/blender-mcp-cli. Use --target to select a
@@ -824,9 +828,12 @@ def _handle_skill_path(
     args: argparse.Namespace, client: BlenderClient | None
 ) -> Any:
     source = _bundled_skill_path()
+    addon = _bundled_addon_path(source)
     return {
         "path": str(source),
+        "addon_path": str(addon),
         "files": list(SKILL_FILES),
+        "install_files": list(SKILL_INSTALL_FILES),
     }
 
 
@@ -834,6 +841,7 @@ def _handle_skill_install(
     args: argparse.Namespace, client: BlenderClient | None
 ) -> Any:
     source = _bundled_skill_path()
+    sources = _bundled_skill_sources(source)
     requested_target = (
         Path(args.target).expanduser() if args.target else _default_skill_target()
     )
@@ -854,8 +862,7 @@ def _handle_skill_install(
 
         _reject_skill_destination_symlinks(target)
         target.mkdir(parents=True, exist_ok=True)
-        for relative_name in SKILL_FILES:
-            source_file = source / relative_name
+        for relative_name, source_file in sources:
             target_file = target / relative_name
             target_file.parent.mkdir(parents=True, exist_ok=True)
             if source_file.resolve() != target_file.resolve():
@@ -871,12 +878,13 @@ def _handle_skill_install(
     return {
         "source": str(source),
         "target": str(target),
+        "addon_path": str(target / "addon.py"),
         "files": copied,
     }
 
 
 def _reject_skill_destination_symlinks(target: Path) -> None:
-    for relative_name in SKILL_FILES:
+    for relative_name in SKILL_INSTALL_FILES:
         current = target
         for part in Path(relative_name).parts:
             current /= part
@@ -921,6 +929,38 @@ def _bundled_skill_path() -> Path:
         "Bundled Skill files were not found; reinstall blender-mcp-cli",
         details={"checked": checked, "required_files": list(SKILL_FILES)},
     )
+
+
+def _bundled_addon_path(skill_path: Path) -> Path:
+    module_path = Path(__file__).resolve()
+    candidates = [skill_path / "addon.py"]
+    if module_path.parent.parent.name == "src":
+        candidates.append(module_path.parents[2] / "addon.py")
+
+    checked: list[str] = []
+    for candidate in candidates:
+        candidate = candidate.resolve()
+        if str(candidate) in checked:
+            continue
+        checked.append(str(candidate))
+        if candidate.is_file():
+            return candidate
+
+    raise LocalIOError(
+        "Bundled Blender add-on was not found; reinstall blender-mcp-cli",
+        details={"checked": checked, "required_file": "addon.py"},
+    )
+
+
+def _bundled_skill_sources(skill_path: Path) -> list[tuple[str, Path]]:
+    addon = _bundled_addon_path(skill_path)
+    return [
+        (
+            relative_name,
+            addon if relative_name == "addon.py" else skill_path / relative_name,
+        )
+        for relative_name in SKILL_INSTALL_FILES
+    ]
 
 
 def _default_skill_target() -> Path:
@@ -1103,12 +1143,12 @@ COMMAND_SCHEMA = {
         {
             "cli": "skill path",
             "type": "skill_path",
-            "description": "locate the Skill shipped with the installed package",
+            "description": "locate the Skill and Blender add-on shipped with the package",
         },
         {
             "cli": "skill install [--target DIR] [--force]",
             "type": "skill_install",
-            "description": "install the bundled Skill into a Codex skills directory",
+            "description": "install the Skill and add-on into a Codex skills directory",
         },
     ],
     "exit_codes": {
